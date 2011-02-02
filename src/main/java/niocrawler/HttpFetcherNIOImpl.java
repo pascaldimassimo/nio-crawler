@@ -8,28 +8,32 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
 
-public class HttpFetcherNIOImpl implements HttpFetcher
+public class HttpFetcherNIOImpl
 {
     private Selector                selector;
 
-    private ByteBuffer              readBuffer   = ByteBuffer.allocate(8192);
+    private ByteBuffer              readBuffer         = ByteBuffer.allocate(8192);
 
-    private Map<URI, ByteBuffer>    writeBuffers = new HashMap<URI, ByteBuffer>();
+    private Map<URI, ByteBuffer>    writeBuffers       = new HashMap<URI, ByteBuffer>();
 
-    private Map<URI, StringBuilder> content      = new HashMap<URI, StringBuilder>();
+    private Map<URI, StringBuilder> content            = new HashMap<URI, StringBuilder>();
 
-    private List<URI>               urlsPending;
+    private BlockingQueue<URI>      linksQueue;
 
-    public HttpFetcherNIOImpl() throws IOException
+    private BlockingQueue<Page>     pagesQueue;
+
+    private HttpRequestBuilder      httpRequestBuilder = new HttpRequestBuilder();
+
+    public HttpFetcherNIOImpl(BlockingQueue<URI> linksQueue, BlockingQueue<Page> pagesQueue) throws IOException
     {
-        selector = SelectorProvider.provider().openSelector();
+        this.linksQueue = linksQueue;
+        this.pagesQueue = pagesQueue;
+        this.selector = SelectorProvider.provider().openSelector();
     }
 
     public String getContent()
@@ -37,23 +41,19 @@ public class HttpFetcherNIOImpl implements HttpFetcher
         return content.toString();
     }
 
-    @Override
-    public void fetch(List<URI> urls)
+    public void fetch()
     {
-        try
-        {
-            initiateConnections(urls);
-        }
-        catch (IOException e)
-        {
-            e.printStackTrace();
-        }
-
-        while (!urlsPending.isEmpty())
+        while (true)
         {
             try
             {
-                selector.select();
+                initiateNewConnections();
+
+                int nb = selector.select(1000);
+                if (nb == 0 && linksQueue.isEmpty())
+                {
+                    break;
+                }
 
                 // Iterate over the set of keys for which events are available
                 Iterator<SelectionKey> iter = selector.selectedKeys().iterator();
@@ -84,15 +84,25 @@ public class HttpFetcherNIOImpl implements HttpFetcher
             catch (Exception e)
             {
                 e.printStackTrace();
+                break;
             }
         }
     }
 
-    private void initiateConnections(List<URI> urls) throws IOException
+    private void initiateNewConnections() throws IOException
     {
-        urlsPending = new ArrayList<URI>(urls);
-        for (URI url : urls)
+        // Initiate a maximum of 10 new connections
+        for (int i = 0; i < 10; i++)
         {
+            // Fetch without blocking
+            URI url = linksQueue.poll();
+
+            // We will retry at next iteration
+            if (url == null)
+            {
+                break;
+            }
+
             // Create a non-blocking socket channel
             SocketChannel socketChannel = SocketChannel.open();
             socketChannel.configureBlocking(false);
@@ -110,8 +120,6 @@ public class HttpFetcherNIOImpl implements HttpFetcher
 
     private void connect(SelectionKey key) throws IOException
     {
-        System.out.println("connect " + key.attachment());
-
         SocketChannel socketChannel = (SocketChannel) key.channel();
         socketChannel.finishConnect();
 
@@ -122,14 +130,13 @@ public class HttpFetcherNIOImpl implements HttpFetcher
     private void write(SelectionKey key) throws IOException
     {
         URI url = (URI) key.attachment();
-        System.out.println("write " + url);
-
         SocketChannel socketChannel = (SocketChannel) key.channel();
 
         ByteBuffer writeBuffer = writeBuffers.get(url);
         if (writeBuffer == null)
         {
-            writeBuffer = ByteBuffer.wrap("GET / HTTP/1.0\r\n\r\n".getBytes());
+            String getRequest = httpRequestBuilder.buildGet(url);
+            writeBuffer = ByteBuffer.wrap(getRequest.getBytes());
             writeBuffers.put(url, writeBuffer);
         }
 
@@ -147,8 +154,6 @@ public class HttpFetcherNIOImpl implements HttpFetcher
     private void read(SelectionKey key) throws IOException
     {
         URI url = (URI) key.attachment();
-        System.out.println("read " + url);
-
         SocketChannel socketChannel = (SocketChannel) key.channel();
 
         readBuffer.clear();
@@ -160,31 +165,14 @@ public class HttpFetcherNIOImpl implements HttpFetcher
         }
         else
         {
-            System.out.println("close " + key.attachment());
-            // System.out.println("--------------------------");
-            // System.out.println(content.get(url));
-            // System.out.println("--------------------------");
-
             // Reading is complete
             key.channel().close();
             key.cancel();
 
-            urlsPending.remove(url);
+            // Add to page queue
+            StringBuilder sb = content.remove(url);
+            Page page = new Page(url, sb.toString());
+            pagesQueue.add(page);
         }
-    }
-
-    public static void main(String[] args) throws Exception
-    {
-        // opentext.com
-        // yahoo.ca
-        // cnn.com
-        // gm.com
-
-        URI[] urls = new URI[] { new URI("http://yahoo.ca"), new URI("http://opentext.com"), new URI("http://cnn.com"),
-            new URI("http://gm.com"), new URI("http://localhost:4567") };
-
-        HttpFetcherNIOImpl client = new HttpFetcherNIOImpl();
-        client.fetch(Arrays.asList(urls));
-
     }
 }
