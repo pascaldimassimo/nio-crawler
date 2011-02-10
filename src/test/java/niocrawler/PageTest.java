@@ -5,7 +5,6 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.net.URI;
-import java.net.URL;
 import java.util.List;
 
 import org.apache.commons.io.FileUtils;
@@ -20,10 +19,11 @@ public class PageTest
     public void setup() throws Exception
     {
         File file = new File("src/test/resources/page1.txt");
-        String content = FileUtils.readFileToString(file);
+        String data = FileUtils.readFileToString(file);
 
         URI url = new URI("http://localhost:4567/ho");
-        page = new Page(url, content);
+        page = new Page(url, data.getBytes());
+        page.process();
     }
 
     @Test

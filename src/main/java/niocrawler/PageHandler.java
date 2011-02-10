@@ -22,10 +22,20 @@ public class PageHandler implements Runnable
         this.linksStorage = linksStorage;
     }
 
-    // TODO rename to indicate side-effect
-    private boolean canVisit(URI url)
+    /**
+     * Add this url to the queue.
+     * 
+     * The url will only be added if it can be visited AND it is not already in
+     * the url storage (meaning it has not been previously visited).
+     * 
+     * @param url
+     */
+    private void add(URI url)
     {
-        return job.visit(url) && linksStorage.add(url);
+        if (job.visit(url) && linksStorage.add(url))
+        {
+            linksQueue.add(url);
+        }
     }
 
     @Override
@@ -37,6 +47,8 @@ public class PageHandler implements Runnable
             {
                 Page page = pagesQueue.take();
                 System.out.println("Handling " + page.getUri());
+                page.process();
+
                 if (page.getStatusCode() == 200)
                 {
                     // Let the user's job process this page
@@ -48,20 +60,14 @@ public class PageHandler implements Runnable
                         List<URI> links = page.getLinks();
                         for (URI link : links)
                         {
-                            if (canVisit(link))
-                            {
-                                linksQueue.add(link);
-                            }
+                            add(link);
                         }
                     }
                 }
                 else if (page.getStatusCode() == 301 || page.getStatusCode() == 302)
                 {
                     URI location = new URI(page.getHeader("Location"));
-                    if (canVisit(location))
-                    {
-                        linksQueue.add(location);
-                    }
+                    add(location);
                 }
                 else
                 {

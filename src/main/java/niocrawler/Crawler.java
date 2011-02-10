@@ -8,11 +8,6 @@ public class Crawler
 {
     public static void main(String[] args) throws Exception
     {
-        // opentext.com
-        // yahoo.ca
-        // cnn.com
-        // gm.com
-
         // TODO get from args
         TestJob crawler = new TestJob();
 

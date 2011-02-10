@@ -1,5 +1,6 @@
 package niocrawler;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -15,30 +16,25 @@ import java.util.concurrent.BlockingQueue;
 
 public class HttpFetcherNIOImpl
 {
-    private Selector                selector;
+    private Selector                        selector;
 
-    private ByteBuffer              readBuffer         = ByteBuffer.allocate(8192);
+    private ByteBuffer                      readBuffer         = ByteBuffer.allocate(8192);
 
-    private Map<URI, ByteBuffer>    writeBuffers       = new HashMap<URI, ByteBuffer>();
+    private Map<URI, ByteBuffer>            writeBuffers       = new HashMap<URI, ByteBuffer>();
 
-    private Map<URI, StringBuilder> content            = new HashMap<URI, StringBuilder>();
+    private Map<URI, ByteArrayOutputStream> streams            = new HashMap<URI, ByteArrayOutputStream>();
 
-    private BlockingQueue<URI>      linksQueue;
+    private BlockingQueue<URI>              linksQueue;
 
-    private BlockingQueue<Page>     pagesQueue;
+    private BlockingQueue<Page>             pagesQueue;
 
-    private HttpRequestBuilder      httpRequestBuilder = new HttpRequestBuilder();
+    private HttpRequestBuilder              httpRequestBuilder = new HttpRequestBuilder();
 
     public HttpFetcherNIOImpl(BlockingQueue<URI> linksQueue, BlockingQueue<Page> pagesQueue) throws IOException
     {
         this.linksQueue = linksQueue;
         this.pagesQueue = pagesQueue;
         this.selector = SelectorProvider.provider().openSelector();
-    }
-
-    public String getContent()
-    {
-        return content.toString();
     }
 
     public void fetch()
@@ -114,7 +110,7 @@ public class HttpFetcherNIOImpl
             SelectionKey key = socketChannel.register(selector, SelectionKey.OP_CONNECT);
             key.attach(url);
 
-            content.put(url, new StringBuilder());
+            streams.put(url, new ByteArrayOutputStream());
         }
     }
 
@@ -160,8 +156,7 @@ public class HttpFetcherNIOImpl
         int numRead = socketChannel.read(readBuffer);
         if (numRead > 0)
         {
-            String part = new String(readBuffer.array(), 0, numRead);
-            content.get(url).append(part);
+            streams.get(url).write(readBuffer.array(), 0, numRead);
         }
         else
         {
@@ -170,8 +165,8 @@ public class HttpFetcherNIOImpl
             key.cancel();
 
             // Add to page queue
-            StringBuilder sb = content.remove(url);
-            Page page = new Page(url, sb.toString());
+            ByteArrayOutputStream stream = streams.remove(url);
+            Page page = new Page(url, stream.toByteArray());
             pagesQueue.add(page);
         }
     }
