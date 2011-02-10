@@ -13,7 +13,7 @@ public class Crawler
 
         BlockingQueue<URI> linksQueue = new LinkedBlockingQueue<URI>();
         // TODO get starting url from args
-        linksQueue.put(new URI("http://www.nstein.com/en/"));
+        linksQueue.put(new URI("http://en.wikinews.org/wiki/Main_Page"));
 
         BlockingQueue<Page> pagesQueue = new LinkedBlockingQueue<Page>();
         LinksStorageMemImpl linksStorage = new LinksStorageMemImpl();

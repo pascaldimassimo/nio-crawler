@@ -66,6 +66,7 @@ public class PageHandler implements Runnable
                 }
                 else if (page.getStatusCode() == 301 || page.getStatusCode() == 302)
                 {
+                    // TODO handle case when location is relative
                     URI location = new URI(page.getHeader("Location"));
                     add(location);
                 }

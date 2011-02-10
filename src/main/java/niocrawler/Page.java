@@ -63,18 +63,18 @@ public class Page
     public List<URI> getLinks()
     {
         Document doc = Jsoup.parse(body);
-        Elements hrefs = doc.select("a[href]");
+        Elements elems = doc.select("a[href]");
 
         ArrayList<URI> links = new ArrayList<URI>();
-        for (Element href : hrefs)
+        for (Element elem : elems)
         {
             try
             {
-                String attr = href.attr("abs:href");
+                String href = elem.attr("href");
 
                 // see
                 // http://stackoverflow.com/questions/724043/http-url-address-encoding-in-java
-                URI link = new URI(attr.replaceAll("\\s", "%20"));
+                URI link = new URI(href.replaceAll("\\s", "%20"));
                 link = new URI(link.toASCIIString());
 
                 link = uri.resolve(link);

@@ -8,7 +8,7 @@ public class TestJob implements Job
     public boolean visit(URI url)
     {
 //        System.out.println("VISIT? " + url);
-        return url.toString().startsWith("http://www.nstein.com");
+        return url.toString().startsWith("http://en.wikinews.org/wiki/");
     }
 
     @Override
